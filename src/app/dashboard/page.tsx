@@ -3,14 +3,20 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Shell, Panel, EmptyState, PrimaryLink } from "@/components/Shell";
+import { fetchJson } from "@/lib/clientApi";
 
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [metrics, setMetrics] = useState<any>(null);
+  const [dbWarning, setDbWarning] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
-    Promise.all([fetch("/api/traces").then((r) => r.json()), fetch("/api/traction").then((r) => r.json())])
-      .then(([traces, traction]) => { setData(traces); setMetrics(traction.metrics); })
+    Promise.all([fetchJson<any>("/api/traces"), fetchJson<any>("/api/traction")])
+      .then(([traces, traction]) => {
+        setData(traces);
+        setMetrics(traction.metrics);
+        setDbWarning(traces.db?.error || traction.db?.error || "");
+      })
       .catch((e) => setError(e.message));
   }, []);
   return (
@@ -20,6 +26,7 @@ export default function DashboardPage() {
         <PrimaryLink href="/traces/new">Create trace</PrimaryLink>
       </div>
       {error ? <p className="text-[var(--danger)]">{error}</p> : null}
+      {dbWarning ? <Panel title="Configuration Required"><p className="text-sm text-[var(--danger)]">{dbWarning}</p><p className="mt-2 text-sm text-[var(--muted)]">The dashboard is showing honest empty-state metrics until a real database is connected.</p></Panel> : null}
       <section className="grid gap-4 md:grid-cols-4">
         {["tracesCreated", "committedTraces", "verifiedTraces", "publicTraceViews"].map((key) => (
           <Panel key={key} title={key}><p className="mono text-3xl font-bold text-white">{metrics?.[key] ?? "-"}</p></Panel>

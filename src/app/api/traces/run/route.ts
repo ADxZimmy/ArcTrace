@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { commitTraceOnchain } from "@/lib/arc/client";
+import { databaseConfigured, databaseUnavailablePayload } from "@/lib/db/availability";
 import { txExplorerUrl } from "@/lib/config";
 import { runAgentPipeline } from "@/lib/ai/pipeline";
 import { runTraceSchema } from "@/lib/schemas";
@@ -9,6 +10,9 @@ import { json } from "@/lib/http";
 
 export async function POST(request: Request) {
   try {
+    if (!databaseConfigured()) return NextResponse.json({ error: databaseUnavailablePayload().error }, { status: 400 });
+    if (!process.env.TRACE_REGISTRY_ADDRESS) return NextResponse.json({ error: "TRACE_REGISTRY_ADDRESS is required. Deploy TraceRegistry and add its Arc Testnet address." }, { status: 400 });
+    if (!process.env.AI_PROVIDER || !process.env.AI_API_KEY) return NextResponse.json({ error: "AI_PROVIDER and AI_API_KEY are required to run the multi-agent trace pipeline." }, { status: 400 });
     const input = runTraceSchema.parse(await request.json());
     const agent = await prisma.agent.findUnique({ where: { id: input.agentId } });
     if (!agent?.onchainAgentId) throw new Error("Agent must be registered on Arc Testnet before running a trace");

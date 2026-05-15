@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { databaseConfigured, databaseUnavailablePayload } from "@/lib/db/availability";
 import { defaultPolicyHash } from "@/lib/hashing";
 import { registerAgentSchema } from "@/lib/schemas";
 import { registerAgentOnchain } from "@/lib/arc/client";
@@ -8,6 +9,9 @@ import { trackEvent } from "@/lib/metrics/track";
 
 export async function POST(request: Request) {
   try {
+    if (!databaseConfigured()) return NextResponse.json({ error: databaseUnavailablePayload().error }, { status: 400 });
+    if (!process.env.AGENT_REGISTRY_ADDRESS) return NextResponse.json({ error: "AGENT_REGISTRY_ADDRESS is required. Deploy AgentRegistry and add its Arc Testnet address." }, { status: 400 });
+    if (!process.env.PRIVATE_KEY) return NextResponse.json({ error: "PRIVATE_KEY is required for the current server-side Arc Testnet wallet flow." }, { status: 400 });
     const input = registerAgentSchema.parse(await request.json().catch(() => ({})));
     const onchain = await registerAgentOnchain(input.name, input.metadataUri, defaultPolicyHash);
     const event = onchain.event?.args;

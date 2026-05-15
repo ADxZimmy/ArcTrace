@@ -22,10 +22,10 @@ export function walletClient() {
 
 export function contractAddresses() {
   return {
-    agentRegistry: process.env.AGENT_REGISTRY_ADDRESS as `0x${string}` | undefined,
-    traceRegistry: process.env.TRACE_REGISTRY_ADDRESS as `0x${string}` | undefined,
-    resolutionRegistry: process.env.RESOLUTION_REGISTRY_ADDRESS as `0x${string}` | undefined,
-    reputationRegistry: process.env.REPUTATION_REGISTRY_ADDRESS as `0x${string}` | undefined,
+    agentRegistry: (process.env.AGENT_REGISTRY_ADDRESS || null) as `0x${string}` | null,
+    traceRegistry: (process.env.TRACE_REGISTRY_ADDRESS || null) as `0x${string}` | null,
+    resolutionRegistry: (process.env.RESOLUTION_REGISTRY_ADDRESS || null) as `0x${string}` | null,
+    reputationRegistry: (process.env.REPUTATION_REGISTRY_ADDRESS || null) as `0x${string}` | null,
   };
 }
 

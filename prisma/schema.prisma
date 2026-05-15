@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String          @id @default(cuid())
+  walletAddress String?         @unique @map("wallet_address")
+  email         String?
+  createdAt     DateTime        @default(now()) @map("created_at")
+  lastSeenAt    DateTime        @default(now()) @map("last_seen_at")
+  traces        Trace[]
+  feedback      Feedback[]
+  events        TractionEvent[]
+
+  @@map("users")
+}
+
+model Agent {
+  id              String   @id @default(cuid())
+  onchainAgentId  String?  @unique @map("onchain_agent_id")
+  ownerWallet     String   @map("owner_wallet")
+  name            String
+  metadataUri     String   @map("metadata_uri")
+  policyHash      String   @map("policy_hash")
+  contractTxHash  String?  @map("contract_tx_hash")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  traces          Trace[]
+
+  @@map("agents")
+}
+
+model Trace {
+  id                 String          @id @default(cuid())
+  onchainTraceId     String?         @unique @map("onchain_trace_id")
+  agentId            String          @map("agent_id")
+  creatorUserId      String?         @map("creator_user_id")
+  question           String
+  questionHash       String          @map("question_hash")
+  traceHash          String          @unique @map("trace_hash")
+  sourceBundleHash   String          @map("source_bundle_hash")
+  metadataUri        String          @map("metadata_uri")
+  stance             String
+  confidence         Int
+  riskScore          Int             @map("risk_score")
+  category           String
+  horizon            String
+  expiryTimestamp    DateTime        @map("expiry_timestamp")
+  sourceQualityScore Int             @map("source_quality_score")
+  status             String          @default("draft")
+  arcTxHash          String?         @map("arc_tx_hash")
+  arcBlockNumber     BigInt?         @map("arc_block_number")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  agent              Agent           @relation(fields: [agentId], references: [id])
+  creator            User?           @relation(fields: [creatorUserId], references: [id])
+  payload            TracePayload?
+  sources            Source[]
+  resolutions        Resolution[]
+  feedback           Feedback[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@map("traces")
+}
+
+model TracePayload {
+  id                 String   @id @default(cuid())
+  traceId            String   @unique @map("trace_id")
+  fullJson           Json     @map("full_json")
+  publicSummary      String   @map("public_summary")
+  signalsJson        Json     @map("signals_json")
+  risksJson          Json     @map("risks_json")
+  agentCommitteeJson Json     @map("agent_committee_json")
+  rawSourceRefsJson  Json     @map("raw_source_refs_json")
+  createdAt          DateTime @default(now()) @map("created_at")
+  trace              Trace    @relation(fields: [traceId], references: [id])
+
+  @@map("trace_payloads")
+}
+
+model Source {
+  id               String   @id @default(cuid())
+  traceId          String   @map("trace_id")
+  sourceType       String   @map("source_type")
+  provider         String
+  urlOrIdentifier  String   @map("url_or_identifier")
+  title            String
+  publishedAt      DateTime? @map("published_at")
+  fetchedAt        DateTime @default(now()) @map("fetched_at")
+  reliabilityScore Int      @map("reliability_score")
+  recencyScore     Int      @map("recency_score")
+  relevanceScore   Int      @map("relevance_score")
+  hash             String
+  trace            Trace    @relation(fields: [traceId], references: [id])
+
+  @@map("sources")
+}
+
+model Resolution {
+  id             String    @id @default(cuid())
+  traceId        String    @map("trace_id")
+  outcome        String
+  evidenceUri    String    @map("evidence_uri")
+  notes          String
+  notesHash      String    @map("notes_hash")
+  resolverWallet String    @map("resolver_wallet")
+  arcTxHash      String?   @map("arc_tx_hash")
+  resolvedAt     DateTime  @default(now()) @map("resolved_at")
+  trace          Trace     @relation(fields: [traceId], references: [id])
+
+  @@map("resolutions")
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  traceId   String   @map("trace_id")
+  userId    String?  @map("user_id")
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  trace     Trace    @relation(fields: [traceId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("feedback")
+}
+
+model TractionEvent {
+  id           String   @id @default(cuid())
+  userId       String?  @map("user_id")
+  walletAddress String? @map("wallet_address")
+  eventType    String   @map("event_type")
+  entityType   String   @map("entity_type")
+  entityId     String   @map("entity_id")
+  metadataJson Json?    @map("metadata_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("traction_events")
+}

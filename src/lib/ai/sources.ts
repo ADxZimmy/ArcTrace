@@ -53,6 +53,63 @@ function inferVsCurrency(question: string) {
   return /\beth\b|ethereum/i.test(question) && !/\bbtc\b|bitcoin/i.test(question) ? "usd" : "usd";
 }
 
+function stripXml(value: string) {
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function xmlTag(item: string, tag: string) {
+  const match = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match?.[1]?.replace(/^<!\[CDATA\[/, "").replace(/\]\]>$/, "").trim() || "";
+}
+
+async function collectRssSources(input: { question: string; category: string; sourcesCount: number }) {
+  const feeds = [
+    { provider: "coindesk_rss", title: "CoinDesk latest crypto news", url: "https://www.coindesk.com/arc/outboundfeeds/rss/" },
+    { provider: "cointelegraph_rss", title: "Cointelegraph latest crypto news", url: "https://cointelegraph.com/rss" },
+  ];
+  const collected: CollectedSource[] = [];
+  const unavailable: SourceCollection["unavailable"] = [];
+  const terms = input.question
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((term) => term.length > 2 && !["will", "the", "over", "next", "days", "week", "month", "increase", "decrease"].includes(term));
+
+  for (const feed of feeds) {
+    try {
+      const res = await fetch(feed.url, { next: { revalidate: 300 } });
+      if (!res.ok) throw new Error(`${feed.provider} returned ${res.status}`);
+      const xml = await res.text();
+      const items = xml.split(/<item>/i).slice(1, 4);
+      for (const item of items) {
+        const title = stripXml(xmlTag(item, "title"));
+        const description = stripXml(xmlTag(item, "description"));
+        const link = stripXml(xmlTag(item, "link"));
+        const publishedAt = xmlTag(item, "pubDate") ? new Date(xmlTag(item, "pubDate")).toISOString() : new Date().toISOString();
+        const haystack = `${title} ${description}`.toLowerCase();
+        const relevanceBoost = terms.some((term) => haystack.includes(term)) ? 12 : 0;
+        collected.push(
+          source(`src_${input.sourcesCount + collected.length + 1}`, {
+            source_type: "news",
+            provider: feed.provider,
+            title: title || feed.title,
+            url_or_identifier: link || feed.url,
+            timestamp: publishedAt,
+            excerpt: description.slice(0, 1800),
+            reliability_score: 68,
+            recency_score: scoreRecency(publishedAt),
+            relevance_score: Math.min(90, 60 + relevanceBoost + (input.category.toLowerCase().includes("crypto") ? 8 : 0)),
+            conflict_score: 38,
+          }),
+        );
+      }
+    } catch (error) {
+      unavailable.push({ adapter: feed.provider, reason: error instanceof Error ? error.message : `${feed.provider} failed` });
+    }
+  }
+
+  return { collected, unavailable };
+}
+
 export async function collectSources(input: {
   question: string;
   category: string;
@@ -171,6 +228,9 @@ export async function collectSources(input: {
         unavailable.push({ adapter: "news", reason: error instanceof Error ? error.message : "News adapter failed" });
       }
     }
+    const rss = await collectRssSources({ question: input.question, category: input.category, sourcesCount: sources.length });
+    sources.push(...rss.collected);
+    unavailable.push(...rss.unavailable);
   }
 
   if (input.useOnchain) unavailable.push({ adapter: "onchain", reason: "No onchain data adapter configured for this environment" });

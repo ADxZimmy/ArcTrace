@@ -2,6 +2,27 @@ import { prisma } from "@/lib/db/prisma";
 import { hashString } from "@/lib/hashing";
 import { publicClient, readAgent, readTraceByHash } from "@/lib/arc/client";
 
+function serializeOnchainTrace(trace: unknown) {
+  if (!trace || typeof trace !== "object") return null;
+  const value = trace as Record<string, unknown>;
+  return {
+    traceId: value.traceId?.toString() ?? null,
+    agentId: value.agentId?.toString() ?? null,
+    creator: value.creator ?? null,
+    questionHash: value.questionHash ?? null,
+    traceHash: value.traceHash ?? null,
+    metadataURI: value.metadataURI ?? null,
+    stance: value.stance ?? null,
+    confidence: value.confidence?.toString() ?? null,
+    riskScore: value.riskScore?.toString() ?? null,
+    category: value.category ?? null,
+    expiryTimestamp: value.expiryTimestamp?.toString() ?? null,
+    createdAt: value.createdAt?.toString() ?? null,
+    resolved: value.resolved ?? null,
+    resolutionId: value.resolutionId?.toString() ?? null,
+  };
+}
+
 export async function verifyTrace(traceId: string) {
   const trace = await prisma.trace.findUnique({
     where: { id: traceId },
@@ -20,7 +41,7 @@ export async function verifyTrace(traceId: string) {
 
   if (trace?.traceHash) {
     try {
-      onchainTrace = await readTraceByHash(trace.traceHash as `0x${string}`);
+      onchainTrace = serializeOnchainTrace(await readTraceByHash(trace.traceHash as `0x${string}`));
       onchainTraceExists = true;
     } catch {
       onchainTraceExists = false;

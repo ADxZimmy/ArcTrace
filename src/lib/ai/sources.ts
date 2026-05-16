@@ -33,6 +33,26 @@ function source(id: string, data: Omit<CollectedSource, "id" | "hash" | "final_w
   return { id, hash, final_weight: Math.max(0, Math.min(1, final_weight)), ...data };
 }
 
+function inferCoinId(question: string) {
+  const lower = question.toLowerCase();
+  const candidates: Array<[string, string[]]> = [
+    ["bitcoin", ["bitcoin", "btc"]],
+    ["ethereum", ["ethereum", "eth"]],
+    ["solana", ["solana", "sol"]],
+    ["chainlink", ["chainlink", "link"]],
+    ["arbitrum", ["arbitrum", "arb"]],
+    ["optimism", ["optimism", "op"]],
+    ["uniswap", ["uniswap", "uni"]],
+    ["dogecoin", ["dogecoin", "doge"]],
+    ["ripple", ["ripple", "xrp"]],
+  ];
+  return candidates.find(([, aliases]) => aliases.some((alias) => lower.includes(alias)))?.[0] || null;
+}
+
+function inferVsCurrency(question: string) {
+  return /\beth\b|ethereum/i.test(question) && !/\bbtc\b|bitcoin/i.test(question) ? "usd" : "usd";
+}
+
 export async function collectSources(input: {
   question: string;
   category: string;
@@ -66,6 +86,59 @@ export async function collectSources(input: {
       );
     } catch (error) {
       unavailable.push({ adapter: "market", reason: error instanceof Error ? error.message : "Market adapter failed" });
+    }
+
+    const coinId = inferCoinId(input.question);
+    if (coinId) {
+      try {
+        const marketUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=${inferVsCurrency(input.question)}&ids=${coinId}&price_change_percentage=1h,24h,7d,30d`;
+        const res = await fetch(marketUrl, { next: { revalidate: 120 } });
+        if (!res.ok) throw new Error(`CoinGecko asset market returned ${res.status}`);
+        const json = await res.json();
+        sources.push(
+          source(`src_${sources.length + 1}`, {
+            source_type: "market_data",
+            provider: "coingecko",
+            title: `CoinGecko ${coinId} market performance`,
+            url_or_identifier: marketUrl,
+            timestamp: new Date().toISOString(),
+            excerpt: JSON.stringify(json?.[0] ?? json).slice(0, 2200),
+            reliability_score: 82,
+            recency_score: 96,
+            relevance_score: 96,
+            conflict_score: 18,
+          }),
+        );
+      } catch (error) {
+        unavailable.push({ adapter: "asset_market", reason: error instanceof Error ? error.message : "Asset market adapter failed" });
+      }
+
+      try {
+        const historyUrl = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=30&interval=daily`;
+        const res = await fetch(historyUrl, { next: { revalidate: 300 } });
+        if (!res.ok) throw new Error(`CoinGecko history returned ${res.status}`);
+        const json = await res.json();
+        const prices = Array.isArray(json.prices) ? json.prices.slice(-8) : [];
+        const volumes = Array.isArray(json.total_volumes) ? json.total_volumes.slice(-8) : [];
+        sources.push(
+          source(`src_${sources.length + 1}`, {
+            source_type: "market_data",
+            provider: "coingecko",
+            title: `CoinGecko ${coinId} 30 day price and volume history`,
+            url_or_identifier: historyUrl,
+            timestamp: new Date().toISOString(),
+            excerpt: JSON.stringify({ recent_prices: prices, recent_volumes: volumes }).slice(0, 2200),
+            reliability_score: 82,
+            recency_score: 92,
+            relevance_score: 92,
+            conflict_score: 22,
+          }),
+        );
+      } catch (error) {
+        unavailable.push({ adapter: "market_history", reason: error instanceof Error ? error.message : "Market history adapter failed" });
+      }
+    } else {
+      unavailable.push({ adapter: "asset_market", reason: "No supported crypto asset symbol was detected in the question" });
     }
   }
 

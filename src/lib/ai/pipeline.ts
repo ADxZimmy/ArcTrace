@@ -155,6 +155,7 @@ function systemPrompt() {
     "The root object must have exactly four keys: research, risk, contrarian, final.",
     "Do not wrap the result in markdown, explanations, agents, output, data, or schema keys.",
     "All numeric fields must be numbers, not strings. final.not_financial_advice must be true.",
+    "Do not default to neutral, 60 confidence, or 65 risk. Calibrate stance, confidence, and risk from the supplied source evidence.",
   ].join(" ");
 }
 
@@ -261,6 +262,12 @@ export async function runAgentPipeline(input: {
       horizon: input.horizon,
       source_quality_score: sourceQualityScore,
       disclaimer: "research and simulation only; no real trades, bets, or capital movement",
+      calibration_rules: {
+        avoid_default_midpoints: "Do not reuse neutral/60/65 unless the source evidence specifically supports that exact result.",
+        stance: "Choose bullish or bearish when weighted evidence clearly leans directional; choose neutral only when supporting and opposing evidence are genuinely balanced; choose avoid when evidence is poor or risk dominates.",
+        confidence: "Use 20-40 for weak or sparse evidence, 41-65 for mixed evidence, 66-85 for clear but uncertain evidence, and 86-100 only for unusually strong evidence.",
+        risk_score: "Base risk_score on volatility, source conflicts, liquidity concerns, and horizon length. It should not be a fixed default.",
+      },
     },
     sources: collected.sources,
     unavailable_adapters: collected.unavailable,
